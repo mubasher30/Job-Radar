@@ -1,17 +1,23 @@
 // netlify/functions/jobs.js
 //
 // Live job aggregator for Job Radar.
-// Pulls from public, no-API-key-required sources so this can genuinely
-// auto-refresh forever without anyone managing credentials:
-//   - Remotive               https://remotive.com/api/remote-jobs
-//   - RemoteOK                https://remoteok.com/api
-//   - We Work Remotely (RSS)  https://weworkremotely.com/categories/*.rss
+// Sources, all legitimately self-serve (no partner approval, no scraping):
+//   - Remotive               https://remotive.com/api/remote-jobs   (public, no key)
+//   - RemoteOK                https://remoteok.com/api               (public, no key)
+//   - We Work Remotely (RSS)  https://weworkremotely.com/categories/*.rss (public, no key)
+//   - Arbeitnow                https://www.arbeitnow.com/api/job-board-api (public, no key)
+//   - Adzuna                   https://api.adzuna.com/v1/api/jobs/*   (free key, set
+//                              ADZUNA_APP_ID / ADZUNA_APP_KEY as Netlify env vars)
 //
-// Note: Indeed / Dice / ZipRecruiter / LinkedIn are NOT included here —
-// those are only reachable through Claude's connected tools inside a chat
-// session, not from a public serverless function. This endpoint is the
-// "always-on" layer; ask Claude in chat for a periodic pass over those
-// four sources to supplement it.
+// Deliberately NOT included, and why:
+//   - Indeed:  public Publisher API was deprecated in 2023/24; the only remaining
+//              access is a sales-led enterprise partner program.
+//   - Dice:    never had a public jobs API — enterprise/employer-side only.
+//   - LinkedIn: blocks automated access; scraping it violates their ToS and gets
+//              IPs banned. Not something to build into a public site.
+// For those three, ask Claude in a chat session for a periodic supplementary pass —
+// they're reachable there through authenticated connectors, just not from a
+// public serverless function.
 
 const RESUME_WEIGHTS = [
   { kw: "design system", w: 12 },
@@ -181,15 +187,85 @@ async function fetchWWR() {
   return all;
 }
 
+// Adzuna — free self-serve API, covers 16+ countries. Requires ADZUNA_APP_ID /
+// ADZUNA_APP_KEY env vars set in Netlify (never commit these to the repo).
+async function fetchAdzuna() {
+  const appId = process.env.ADZUNA_APP_ID;
+  const appKey = process.env.ADZUNA_APP_KEY;
+  if (!appId || !appKey) return []; // silently skip if not configured yet
+
+  const countries = ["us", "gb", "ca", "au", "de"];
+  const queries = ["product designer", "ux designer"];
+  const results = [];
+
+  for (const country of countries) {
+    for (const q of queries) {
+      try {
+        const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=15&what=${encodeURIComponent(q)}&content-type=application/json`;
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
+        for (const j of data.results || []) {
+          if (!isDesignRole(j.title || "")) continue;
+          const { score, matched } = scoreText((j.title || "") + " " + (j.description || ""));
+          results.push({
+            title: j.title,
+            company: j.company && j.company.display_name,
+            location: (j.location && j.location.display_name) || country.toUpperCase(),
+            posted: j.created ? j.created.slice(0, 10) : "",
+            salary: j.salary_min ? `$${Math.round(j.salary_min)} – $${Math.round(j.salary_max)}/yr` : "Not listed",
+            url: j.redirect_url,
+            source: "Adzuna",
+            score,
+            matched
+          });
+        }
+      } catch (e) {
+        /* skip this country/query combo */
+      }
+    }
+  }
+  return results;
+}
+
+// Arbeitnow — public, no API key required, remote-friendly tech/design jobs.
+async function fetchArbeitnow() {
+  try {
+    const res = await fetch("https://www.arbeitnow.com/api/job-board-api");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.data || [])
+      .filter(j => j && j.title && isDesignRole(j.title) && j.remote)
+      .map(j => {
+        const { score, matched } = scoreText((j.title || "") + " " + (j.description || "").replace(/<[^>]+>/g, " ") + " " + (j.tags || []).join(" "));
+        return {
+          title: j.title,
+          company: j.company_name,
+          location: j.location || "Remote",
+          posted: j.created_at ? new Date(j.created_at * 1000).toISOString().slice(0, 10) : "",
+          salary: "Not listed",
+          url: j.url,
+          source: "Arbeitnow",
+          score,
+          matched
+        };
+      });
+  } catch (e) {
+    return [];
+  }
+}
+
 exports.handler = async function () {
   try {
-    const [remotive, remoteok, wwr] = await Promise.all([
+    const [remotive, remoteok, wwr, adzuna, arbeitnow] = await Promise.all([
       fetchRemotive(),
       fetchRemoteOK(),
-      fetchWWR()
+      fetchWWR(),
+      fetchAdzuna(),
+      fetchArbeitnow()
     ]);
 
-    let all = [...remotive, ...remoteok, ...wwr];
+    let all = [...remotive, ...remoteok, ...wwr, ...adzuna, ...arbeitnow];
 
     // De-dupe by title+company (rough)
     const seen = new Set();
