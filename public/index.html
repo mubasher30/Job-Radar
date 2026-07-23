@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Job Radar — Live</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#FAFAF8;
+    --panel:#FFFFFF;
+    --ink:#17161C;
+    --ink-soft:#5C5A66;
+    --line:#E4E2DC;
+    --accent:#5B5FEF;
+    --accent-soft:#EEEEFD;
+    --high:#0F9B8E;
+    --high-soft:#E3F5F2;
+    --mid:#D97706;
+    --mid-soft:#FCF0DD;
+    --low:#B5482E;
+    --low-soft:#F8E9E4;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--canvas);color:var(--ink);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 80px;}
+  header{margin-bottom:32px;}
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);display:flex;align-items:center;gap:8px;margin-bottom:14px;
+  }
+  .eyebrow::before{content:"";width:7px;height:7px;background:var(--accent);border-radius:50%;display:inline-block;animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(28px,4vw,42px);line-height:1.05;letter-spacing:-0.01em;margin:0 0 12px;}
+  header p.sub{font-size:15px;color:var(--ink-soft);max-width:680px;line-height:1.55;margin:0 0 6px;}
+  .updated-row{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap;}
+  .updated{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-soft);}
+  .refresh-btn{
+    font-family:'Inter',sans-serif;font-size:13px;font-weight:600;padding:7px 14px;border-radius:8px;
+    background:var(--ink);color:var(--canvas);border:none;cursor:pointer;
+  }
+  .refresh-btn:hover{background:#000;}
+  .refresh-btn:disabled{opacity:.5;cursor:default;}
+
+  .rail{margin-top:24px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;}
+  .rail .stat{flex:1 1 150px;padding:16px
